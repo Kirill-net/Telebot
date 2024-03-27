@@ -1,29 +1,24 @@
 import random
-import configparser
 from telebot import types, TeleBot, custom_filters
 from telebot.storage import StateMemoryStorage
 from telebot.handler_backends import State, StatesGroup
-from sqlalchemy.orm import sessionmaker
-from modelsBot import engine, create_tables, insert_tables, data_random, insert_user,\
-    add_word, delete_word, known_users
-
-config = configparser.ConfigParser()                # блок чтения входных данных из ini файла
-config.read('sitings.ini')
-token_bot = config['data_key']['token']
+from Constants import TOKEN
+from modelsBot import create_tables, insert_tables, data_random, \
+    insert_user, add_word, delete_word, known_users
 
 print('Start telegram bot...')
 
 state_storage = StateMemoryStorage()
-bot = TeleBot(token_bot, state_storage=state_storage)
+bot = TeleBot(TOKEN, state_storage=state_storage)
+# engine = sq.create_engine(DNS)
 
-Session = sessionmaker(bind=engine)    # открываем сессию
-session = Session()
-
-create_tables(engine)
+create_tables()
 insert_tables()
 
 known_users = known_users()  # известные юзеры
-buttons = []          # кнопки
+buttons = []  # кнопки
+
+
 def show_hint(*lines):
     """ Функуия формирует строку сообщения (клеет)
 
@@ -31,6 +26,8 @@ def show_hint(*lines):
     :return: возвращает склеенную строку
     """
     return '\n'.join(lines)
+
+
 def show_target(data):
     """ Функуия формирует строку для ответа
 
@@ -38,6 +35,8 @@ def show_target(data):
     :return:  Возвращает f строку
     """
     return f"{data['target_word']} -> {data['translate_word']}"
+
+
 class Command:
     """ Класс для удобства вызова постоянных переменных
 
@@ -45,6 +44,8 @@ class Command:
     ADD_WORD = 'Добавить слово ➕'
     DELETE_WORD = 'Удалить слово🔙'
     NEXT = 'Дальше ⏭'
+
+
 class MyStates(StatesGroup):
     """ Класс, описывающий переменные состояния (State-StatesGroup)
 
@@ -52,48 +53,55 @@ class MyStates(StatesGroup):
     target_word = State()
     translate_word = State()
     another_words = State()
-@bot.message_handler(commands=['cards', 'start'])  # метод вызова обработки комманд
+
+
+@bot.message_handler(commands=['cards', 'start'])
 def create_cards(message):
-    """ выполняет функции приветствия, запросы в базу данных, формирование клавиатуры
-         обработку данных и передачу переменных в 'состояние'
+    """ выполняет функции приветствия, запросы в базу данных,
+     формирование клавиатуры обработку данных
+     и передачу переменных в 'состояние'
 
     :param message: принимает message от telebot
     :return: None
     """
     cid = message.chat.id
-    if cid not in known_users:                 # проверка chat.id в юзерах
+    if cid not in known_users:  # проверка chat.id в юзерах
         known_users.append(cid)
-        insert_user(cid)                      # запрос в БД
-        bot.send_message(cid, f"Привет, приступим к изучению Английского...")
-    markup = types.ReplyKeyboardMarkup(row_width=2)     # создание разметки
+        insert_user(cid)  # запрос в БД
+        bot.send_message(
+            cid,
+            'Привет, приступим к изучению Английского...'
+        )
+    markup = types.ReplyKeyboardMarkup(row_width=2)  # создание разметки
 
-    global buttons                      # глобальные переменные кнопок
+    global buttons  # глобальные переменные кнопок
     buttons = []
-    random_words = data_random(cid)     # запрос в БД
+    random_words = data_random(cid)  # запрос в БД
     target_word = random_words[0]
     translate = random_words[1]
-    target_word_btn = types.KeyboardButton(target_word)       # первая кнопка
-    buttons.append(target_word_btn)                           # добавили кнопку
+    target_word_btn = types.KeyboardButton(target_word)  # первая кнопка
+    buttons.append(target_word_btn)  # добавили кнопку
     others = random_words[2]  # брать из БД
     other_words_btns = [types.KeyboardButton(word) for word in others]
-    buttons.extend(other_words_btns)                          # добавили остальные четыре
+    buttons.extend(other_words_btns)
     random.shuffle(buttons)
     next_btn = types.KeyboardButton(Command.NEXT)
     add_word_btn = types.KeyboardButton(Command.ADD_WORD)
     delete_word_btn = types.KeyboardButton(Command.DELETE_WORD)
-    buttons.extend([next_btn, add_word_btn, delete_word_btn])     # добавили еще три
+    buttons.extend([next_btn, add_word_btn, delete_word_btn])
 
-    markup.add(*buttons)                                       # добавили все кнопки в разметку
+    markup.add(*buttons)
 
     greeting = f"Выбери перевод слова:\n🇷🇺 {translate}"
-    bot.send_message(message.chat.id, greeting, reply_markup=markup)        # вывели разметку с сообщением на экран
-    bot.set_state(message.from_user.id, MyStates.target_word, message.chat.id)  # передаем
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:  # передаем в состояние переменные
+    bot.send_message(message.chat.id, greeting, reply_markup=markup)
+    bot.set_state(message.from_user.id, MyStates.target_word, message.chat.id)
+    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         data['target_word'] = target_word
         data['translate_word'] = translate
         data['other_words'] = others
 
-@bot.message_handler(func=lambda message: message.text == Command.NEXT)   # обработчик комманды
+
+@bot.message_handler(func=lambda message: message.text == Command.NEXT)
 def next_cards(message):
     """ Перенаправляет в другую функцию при соответствующем message
 
@@ -102,7 +110,8 @@ def next_cards(message):
     """
     create_cards(message)
 
-@bot.message_handler(func=lambda message: message.text == Command.DELETE_WORD)   # обработчик комманды
+
+@bot.message_handler(func=lambda message: message.text == Command.DELETE_WORD)
 def delete_words(message):
     """ Отправляет сообщение в telebot и перенаправляет в функцию  'del_word'
 
@@ -110,8 +119,13 @@ def delete_words(message):
     :return: None
     """
     chat_id = message.chat.id
-    bot.send_message(chat_id, 'Введите слово на английском, которое хотите удалить')
+    bot.send_message(
+        chat_id,
+        'Введите слово на английском, которое хотите удалить'
+    )
     bot.register_next_step_handler(message, del_word)
+
+
 def del_word(message):
     """ Взаимодействует с БД для удаления слов
 
@@ -123,7 +137,8 @@ def del_word(message):
     message_to_user = delete_word(cid, word)
     bottons3(message, message_to_user)
 
-@bot.message_handler(func=lambda message: message.text == Command.ADD_WORD)  # обработчик комманды
+
+@bot.message_handler(func=lambda message: message.text == Command.ADD_WORD)
 def write_word(message):
     """Отправляет сообщение в telebot и перенаправляет в функцию  'save_word'
 
@@ -131,11 +146,17 @@ def write_word(message):
     :return: None
     """
     chat_id = message.chat.id
-    bot.send_message(chat_id, 'Введите новое слово на английском и его перевод на русском через пробел')
+    bot.send_message(
+        chat_id,
+        'Введите новое слово на английском \
+        и его перевод на русском через пробел'
+    )
     bot.register_next_step_handler(message, save_word)
+
+
 def save_word(message):
-    """Взаимодействует с БД для добавления слов и запрашивает данные (f строку, кнопки)
-            для дальнейшей передачи в telebot
+    """Взаимодействует с БД для добавления слов и запрашивает данные
+    (f строку, кнопки) для дальнейшей передачи в telebot
 
     :param message: message telebot (chat.id, text)
     :return: None
@@ -145,8 +166,11 @@ def save_word(message):
     cid = message.chat.id
     message_to_user = add_word(cid, word[0], word[1])
     bottons3(message, message_to_user)
+
+
 def bottons3(message, message_to_user):
-    """ вспомогательная функция формирования клавиатуры и передачи сообщения в telebot
+    """ вспомогательная функция формирования клавиатуры
+     и передачи сообщения в telebot
 
     :param message: message telebot(chat.id)
     :param message_to_user: f строка
@@ -161,17 +185,19 @@ def bottons3(message, message_to_user):
     markup.add(*buttons3)
     bot.send_message(message.chat.id, message_to_user, reply_markup=markup)
 
-@bot.message_handler(func=lambda message: True, content_types=['text'])  # обработчик текста
+
+@bot.message_handler(func=lambda message: True, content_types=['text'])
 def message_reply(message):
-    """ проверяет правильность ответа юзера по переводу текста. Формирует ответ. При неправильном выборе ответа
-          меняет (помечает кнопки) и предлагает повторить выбор
+    """ проверяет правильность ответа юзера по переводу текста.
+    Формирует ответ. При неправильном выборе ответа
+    меняет (помечает кнопки) и предлагает повторить выбор
 
     :param message: message telebot (text)
     :return: Non
     """
     text = message.text
     markup = types.ReplyKeyboardMarkup(row_width=2)
-    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:  # считываем переменную из памяти
+    with bot.retrieve_data(message.from_user.id, message.chat.id) as data:
         target_word = data['target_word']
         if text == target_word:
             hint = show_target(data)
@@ -186,11 +212,13 @@ def message_reply(message):
                 if btn.text == text:
                     btn.text = text + '❌'
                     break
-            hint = show_hint("Неверно!!",
-                             f"Попробуй ещё раз вспомнить слово 🇷🇺{data['translate_word']}")
+            hint = show_hint(
+                "Неверно!!",
+                f"Попробуй ещё раз вспомнить слово 🇷🇺{data['translate_word']}"
+            )
     markup.add(*buttons)
     bot.send_message(message.chat.id, hint, reply_markup=markup)
 
+
 bot.add_custom_filter(custom_filters.StateFilter(bot))
-session.close()
 bot.infinity_polling(skip_pending=True)
